@@ -2,6 +2,7 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '1.0.20'
+    id 'dev.lukebemish.immaculate' version '0.1.1'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -13,11 +14,55 @@ tasks.named('wrapper', Wrapper).configure {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = mod_version
+version = "0.0.0-SNAPSHOT"
+
+var pr = System.getenv("PR_NUMBER") ?: ""
+if (pr != "") {
+    version = "0.0.0-pr$pr"
+}
+
+var tag = System.getenv("TAG") ?: ""
+if (tag != "") {
+    version = tag
+}
+
+var hash = System.getenv("HASH") ?: ""
+if (hash != "") {
+    version = hash
+}
+
 group = mod_group_id
 
 repositories {
     mavenLocal()
+    mavenCentral()
+    maven {
+        url = uri("https://modmaven.dev/")
+        content {
+            includeGroup("appeng")
+            includeGroup("mezz.jei")
+        }
+    }
+    maven {
+        url = uri("https://maven.shedaniel.me/")
+        content {
+            includeGroup("me.shedaniel")
+            includeGroup("me.shedaniel.cloth")
+            includeGroup("dev.architectury")
+        }
+    }
+    maven {
+        url = uri("https://maven.terraformersmc.com/")
+        content {
+            includeGroup("dev.emi")
+        }
+    }
+    maven {
+        url = uri("https://api.modrinth.com/maven")
+        content {
+            includeGroup("maven.modrinth")
+        }
+    }
 }
 
 base {
@@ -112,27 +157,7 @@ configurations {
 }
 
 dependencies {
-    // Example optional mod dependency with JEI
-    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
-    // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
-    // compileOnly "mezz.jei:jei-${mc_version}-neoforge-api:${jei_version}"
-    // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
-    // localRuntime "mezz.jei:jei-${mc_version}-neoforge:${jei_version}"
-
-    // Example mod dependency using a mod jar from ./libs with a flat dir repository
-    // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
-    // The group id is ignored when searching -- in this case, it is "blank"
-    // implementation "blank:coolmod-${mc_version}:${coolmod_version}"
-
-    // Example mod dependency using a file as dependency
-    // implementation files("libs/coolmod-${mc_version}-${coolmod_version}.jar")
-
-    // Example project dependency using a sister or child project:
-    // implementation project(":myproject")
-
-    // For more info:
-    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
-    // http://www.gradle.org/docs/current/userguide/dependency_management.html
+    implementation("appeng:appliedenergistics2:${ae2_version}")
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -140,14 +165,12 @@ dependencies {
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
-            minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
-            neo_version_range      : neo_version_range,
             loader_version_range   : loader_version_range,
-            mod_id                 : mod_id,
+            ae2_version            : ae2_version,
+            ae2_upper_bound        : ae2_upper_bound,
             mod_name               : mod_name,
             mod_license            : mod_license,
-            mod_version            : mod_version,
+            mod_version            : version,
             mod_authors            : mod_authors,
             mod_description        : mod_description
     ]
@@ -185,5 +208,31 @@ idea {
     module {
         downloadSources = true
         downloadJavadoc = true
+    }
+}
+
+immaculate {
+    workflows.register('java') {
+        java()
+        trailingNewline()
+        noTabs()
+        googleFixImports()
+        toggleOff = 'spotless:off'
+        toggleOn = 'spotless:on'
+        eclipse {
+            version '3.37.0'
+            config = rootProject.file('codeformat/codeformat.xml')
+        }
+
+        custom 'noNotNull', { String fileContents ->
+            if (fileContents.contains('@NotNull') || fileContents.contains('@Nonnull')) {
+                throw new GradleException('@NotNull and @Nonnull are disallowed.')
+            }
+        }
+    }
+    workflows.named("java") {
+        files.from rootProject.fileTree("src", {
+            include "**/*.java"
+        })
     }
 }
